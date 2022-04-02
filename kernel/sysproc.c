@@ -6,6 +6,8 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "sysinfo.h"
+
 
 uint64
 sys_exit(void)
@@ -44,10 +46,10 @@ sys_sbrk(void)
   int addr;
   int n;
 
-  if(argint(0, &n) < 0)
+  if(argint(0, &n) < 0) // n = a0
     return -1;
-  addr = myproc()->sz;
-  if(growproc(n) < 0)
+  addr = myproc()->sz;  // addr = size of memory
+  if(growproc(n) < 0)   // size += a0
     return -1;
   return addr;
 }
@@ -94,4 +96,35 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+
+// trace lab02
+uint64
+sys_trace(void)
+{
+  struct proc* p = myproc();
+  p->mask = p->trapframe->a0;
+
+  return 0;
+}
+
+
+uint64
+sys_sysinfo(void)
+{
+  uint64 st;
+  struct sysinfo info;
+  struct proc* p = myproc();
+
+  if( argaddr(0, &st) < 0 )
+    return -1;
+
+  info.freemem = get_freemem();
+  info.nproc = get_freeproc();
+
+  if(copyout(p->pagetable, st, (char*)(&info), sizeof(info)) < 0)
+    return -1;
+
+  return 0;
 }

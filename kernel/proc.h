@@ -85,6 +85,7 @@ enum procstate { UNUSED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 // Per-process state
 struct proc {
   struct spinlock lock;
+  pagetable_t kvm_pagetable;
 
   // p->lock must be held when using these:
   enum procstate state;        // Process state

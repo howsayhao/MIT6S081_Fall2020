@@ -21,6 +21,10 @@ static void freeproc(struct proc *p);
 
 extern char trampoline[]; // trampoline.S
 
+
+
+extern pagetable_t kernel_pagetable;
+
 // initialize the proc table at boot time.
 void
 procinit(void)
@@ -40,6 +44,9 @@ procinit(void)
       uint64 va = KSTACK((int) (p - proc));
       kvmmap(va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
       p->kstack = va;
+      // printf("va: %p\n", p->kstack);
+      // printf("kerpa: %p\n", kvmpa(p->kstack));
+      // printf("pa: %p\n", pa);
   }
   kvminithart();
 }
@@ -89,6 +96,7 @@ allocpid() {
 // If found, initialize state required to run in the kernel,
 // and return with p->lock held.
 // If there are no free procs, or a memory allocation fails, return 0.
+extern pte_t *walk(pagetable_t pagetable, uint64 va, int alloc);
 static struct proc*
 allocproc(void)
 {
@@ -127,9 +135,53 @@ found:
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
 
+  // p->kvm_pagetable = uvm_kvminit();
+  // p->kvm_pagetable = (pagetable_t) kalloc();
+  // memset(p->kvm_pagetable, 0, PGSIZE);
+  // vmprint(p->kvm_pagetable);
+  // printf("\n");
+  p->kvm_pagetable = uvm_kvminit();
+  // printf( "p.kstack.va: %p\n", p->kstack );
+  // printf(  "p.kstack.pa: %p\n", kvmpa(p->kstack));
+
+  mappages( p->kvm_pagetable, p->kstack, PGSIZE, \
+            kvmpa(p->kstack),  PTE_R | PTE_W );
+  // vmprint(p->kvm_pagetable);
+  // printf("\n");
+  pte_t *pte;
+  // pte = walk( (pagetable_t)p->kvm_pagetable, (uint64)TRAMPOLINE, 0 );
+  // printf(  "kvm:  %p\n",PTE2PA(*pte));
+  // pte = walk( (pagetable_t)kernel_pagetable, (uint64)TRAMPOLINE, 0 );
+  // printf(  "ker:  %p\n",PTE2PA(*pte));
+  for(int i = 0; i < PLIC; i += PGSIZE )
+  {
+    if((pte = walk(p->pagetable, i, 0)) == 0)
+      continue;
+    if((*pte & PTE_V) == 0)
+      continue;
+    mappages(p->kvm_pagetable, i, PGSIZE, (uint64)PTE2PA(*pte), PTE_FLAGS(*pte));
+  }
+
   return p;
 }
 
+void
+free_kvmpgtbl ( pagetable_t pagetable )
+{
+  for(int i = 0; i < 512; i++){
+    pte_t pte = pagetable[i];
+    if((pte & PTE_V) && (pte & (PTE_R|PTE_W|PTE_X)) == 0){
+      // this PTE points to a lower-level page table.
+      uint64 child = PTE2PA(pte);
+      free_kvmpgtbl((pagetable_t)child);
+      pagetable[i] = 0;
+    } else if(pte & PTE_V){
+      pagetable[i] = 0;
+      // panic("free_kvmpgtbl");
+    }
+  }
+  kfree((void*)pagetable);
+}
 // free a proc structure and the data hanging from it,
 // including user pages.
 // p->lock must be held.
@@ -150,7 +202,14 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  // p->kvm_pagetable = 0;
+  // vmprint(p->kvm_pagetable);
+  // printf("ddsfbba");
+  free_kvmpgtbl(p->kvm_pagetable);
+  // vmprint(p->kvm_pagetable);
+  // printf("lalalala");
 }
+
 
 // Create a user page table for a given process,
 // with no user memory, but with trampoline pages.
@@ -445,7 +504,9 @@ wait(uint64 addr)
     sleep(p, &p->lock);  //DOC: wait-sleep
   }
 }
+// #define SATP_SV39 (8L << 60)
 
+// #define MAKE_SATP(pagetable) (SATP_SV39 | (((uint64)pagetable) >> 12))
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
 // Scheduler never returns.  It loops, doing:
@@ -465,16 +526,32 @@ scheduler(void)
     intr_on();
     
     int found = 0;
+    // for(p = proc; p < &proc[NPROC]; p++) 
+    //   if(p->state != 0)
+    //     printf("pid: %d state: %d\n", p->pid, p->state);
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
       if(p->state == RUNNABLE) {
         // Switch to chosen process.  It is the process's job
         // to release its lock and then reacquire it
         // before jumping back to us.
+                // vmprint(p->kvm_pagetable);
+        // w_satp((8L << 60) | (((uint64)p->kvm_pagetable) >> 12));
+        // w_satp(MAKE_SATP(kernel_pagetable));
+        // sfence_vma();
         p->state = RUNNING;
         c->proc = p;
+        // vmprint(p->kvm_pagetable);
+        // printf("\nkernel below:\n");
+        // vmprint(kernel_pagetable);
+        // exit(1);
+        w_satp((8L << 60) | (((uint64)p->kvm_pagetable) >> 12));
+        // w_satp((8L << 60) | (((uint64)kernel_pagetable) >> 12));
+        sfence_vma();
         swtch(&c->context, &p->context);
 
+        kvminithart();
+        // printf("zju");
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;
@@ -485,6 +562,8 @@ scheduler(void)
     }
 #if !defined (LAB_FS)
     if(found == 0) {
+      // printf("zju");
+      // kvminithart();
       intr_on();
       asm volatile("wfi");
     }

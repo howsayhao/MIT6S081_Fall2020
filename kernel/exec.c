@@ -8,6 +8,7 @@
 #include "elf.h"
 
 static int loadseg(pde_t *pgdir, uint64 addr, struct inode *ip, uint offset, uint sz);
+extern pte_t *walk(pagetable_t pagetable, uint64 va, int alloc);
 
 int
 exec(char *path, char **argv)
@@ -49,6 +50,8 @@ exec(char *path, char **argv)
       goto bad;
     uint64 sz1;
     if((sz1 = uvmalloc(pagetable, sz, ph.vaddr + ph.memsz)) == 0)
+      goto bad;
+    if(sz1 > PLIC)
       goto bad;
     sz = sz1;
     if(ph.vaddr % PGSIZE != 0)
@@ -114,6 +117,15 @@ exec(char *path, char **argv)
   p->trapframe->epc = elf.entry;  // initial program counter = main
   p->trapframe->sp = sp; // initial stack pointer
   proc_freepagetable(oldpagetable, oldsz);
+
+  // p->kvm_pagetable = uvm_kvminit();
+  uvmunmap(p->kvm_pagetable, 0, PGROUNDUP(oldsz)/PGSIZE, 1);
+  for(int i = 0; i < PLIC && i < p->sz; i += PGSIZE )
+  {
+    pte_t *pte = walk(p->pagetable, i, 0);
+    pte_t *pte_k = walk(p->kvm_pagetable, i, 1);
+    *pte_k = (*pte) & (~PTE_U);
+  }
 
   // if( p->pid == 1 )
   //   vmprint( p->pagetable );

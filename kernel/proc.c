@@ -148,18 +148,16 @@ found:
             kvmpa(p->kstack),  PTE_R | PTE_W );
   // vmprint(p->kvm_pagetable);
   // printf("\n");
-  pte_t *pte;
+  // pte_t *pte;
   // pte = walk( (pagetable_t)p->kvm_pagetable, (uint64)TRAMPOLINE, 0 );
   // printf(  "kvm:  %p\n",PTE2PA(*pte));
   // pte = walk( (pagetable_t)kernel_pagetable, (uint64)TRAMPOLINE, 0 );
   // printf(  "ker:  %p\n",PTE2PA(*pte));
-  for(int i = 0; i < PLIC; i += PGSIZE )
+  for(int i = 0; i < PLIC && i < p->sz; i += PGSIZE )
   {
-    if((pte = walk(p->pagetable, i, 0)) == 0)
-      continue;
-    if((*pte & PTE_V) == 0)
-      continue;
-    mappages(p->kvm_pagetable, i, PGSIZE, (uint64)PTE2PA(*pte), PTE_FLAGS(*pte));
+    pte_t *pte = walk(p->pagetable, i, 0);
+    pte_t *pte_k = walk(p->kvm_pagetable, i, 1);
+    *pte_k = (*pte) & (~PTE_U);
   }
 
   return p;
@@ -289,6 +287,13 @@ userinit(void)
 
   p->state = RUNNABLE;
 
+  for(int i = 0; i < PLIC && i < p->sz; i += PGSIZE )
+  {
+    pte_t *pte = walk(p->pagetable, i, 0);
+    pte_t *pte_k = walk(p->kvm_pagetable, i, 1);
+    *pte_k = (*pte) & (~PTE_U);
+  }  
+
   release(&p->lock);
 }
 
@@ -314,6 +319,8 @@ growproc(int n)
 
 // Create a new process, copying the parent.
 // Sets up child kernel stack to return as if from fork() system call.
+extern
+pte_t *walk(pagetable_t pagetable, uint64 va, int alloc);
 int
 fork(void)
 {
@@ -334,6 +341,7 @@ fork(void)
   }
   np->sz = p->sz;
 
+
   np->parent = p;
 
   // copy saved user registers.
@@ -353,6 +361,13 @@ fork(void)
   pid = np->pid;
 
   np->state = RUNNABLE;
+  for(int i = 0; i < np->sz && i < PLIC; i += PGSIZE)
+  {
+    pte_t *pte = walk(np->pagetable, i, 0);
+    pte_t *pte_n = walk(np->kvm_pagetable, i, 1);
+    *pte_n = (*pte) & (~PTE_U);
+  }
+
 
   release(&np->lock);
 

@@ -50,7 +50,8 @@ sys_sbrk(void)
   addr = myproc()->sz;
   if(growproc(n) < 0)
     return -1;
-  if(n > 0)
+
+  if(n >= 0)
     for(int i = addr; i < PLIC && i < addr+n; i += PGSIZE )
     {
       pte_t *pte = walk(myproc()->pagetable, i, 0);
@@ -59,7 +60,7 @@ sys_sbrk(void)
     }
   else
     for(int i = addr-PGSIZE; i >= addr+n; i -= PGSIZE)
-      uvmunmap(myproc()->kvm_pagetable, i, 1, 1);
+      uvmunmap(myproc()->kvm_pagetable, i, 1, 0);
   
   return addr;
 }

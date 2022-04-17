@@ -38,17 +38,17 @@ procinit(void)
       // Allocate a page for the process's kernel stack.
       // Map it high in memory, followed by an invalid
       // guard page.
-      char *pa = kalloc();
-      if(pa == 0)
-        panic("kalloc");
-      uint64 va = KSTACK((int) (p - proc));
-      kvmmap(va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
-      p->kstack = va;
+      // char *pa = kalloc();
+      // if(pa == 0)
+      //   panic("kalloc");
+      // uint64 va = KSTACK((int) (p - proc));
+      // kvmmap(va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
+      // p->kstack = va;
       // printf("va: %p\n", p->kstack);
       // printf("kerpa: %p\n", kvmpa(p->kstack));
       // printf("pa: %p\n", pa);
   }
-  kvminithart();
+  // kvminithart();
 }
 
 // Must be called with interrupts disabled,
@@ -129,23 +129,21 @@ found:
     return 0;
   }
 
-  // Set up new context to start executing at forkret,
-  // which returns to user space.
-  memset(&p->context, 0, sizeof(p->context));
-  p->context.ra = (uint64)forkret;
-  p->context.sp = p->kstack + PGSIZE;
 
-  // p->kvm_pagetable = uvm_kvminit();
-  // p->kvm_pagetable = (pagetable_t) kalloc();
-  // memset(p->kvm_pagetable, 0, PGSIZE);
-  // vmprint(p->kvm_pagetable);
-  // printf("\n");
   p->kvm_pagetable = uvm_kvminit();
   // printf( "p.kstack.va: %p\n", p->kstack );
   // printf(  "p.kstack.pa: %p\n", kvmpa(p->kstack));
+  char *pa = kalloc();
+  if(pa == 0)
+    panic("kalloc");
+  uint64 va = TRAMPOLINE - 2*PGSIZE;
+  mappages(p->kvm_pagetable, va, PGSIZE, (uint64)pa, PTE_R | PTE_W);
+  p->kstack = va;
 
-  mappages( p->kvm_pagetable, p->kstack, PGSIZE, \
-            kvmpa(p->kstack),  PTE_R | PTE_W );
+
+  memset(&p->context, 0, sizeof(p->context));
+  p->context.ra = (uint64)forkret;
+  p->context.sp = p->kstack + PGSIZE;
   // vmprint(p->kvm_pagetable);
   // printf("\n");
   // pte_t *pte;
@@ -153,33 +151,17 @@ found:
   // printf(  "kvm:  %p\n",PTE2PA(*pte));
   // pte = walk( (pagetable_t)kernel_pagetable, (uint64)TRAMPOLINE, 0 );
   // printf(  "ker:  %p\n",PTE2PA(*pte));
-  for(int i = 0; i < PLIC && i < p->sz; i += PGSIZE )
-  {
-    pte_t *pte = walk(p->pagetable, i, 0);
-    pte_t *pte_k = walk(p->kvm_pagetable, i, 1);
-    *pte_k = (*pte) & (~PTE_U);
-  }
+  // for(int i = 0; i < PLIC && i < p->sz; i += PGSIZE )
+  // {
+  //   pte_t *pte = walk(p->pagetable, i, 0);
+  //   pte_t *pte_k = walk(p->kvm_pagetable, i, 1);
+  //   *pte_k = (*pte) & (~PTE_U);
+  // }
 
   return p;
 }
 
-void
-free_kvmpgtbl ( pagetable_t pagetable )
-{
-  for(int i = 0; i < 512; i++){
-    pte_t pte = pagetable[i];
-    if((pte & PTE_V) && (pte & (PTE_R|PTE_W|PTE_X)) == 0){
-      // this PTE points to a lower-level page table.
-      uint64 child = PTE2PA(pte);
-      free_kvmpgtbl((pagetable_t)child);
-      pagetable[i] = 0;
-    } else if(pte & PTE_V){
-      pagetable[i] = 0;
-      // panic("free_kvmpgtbl");
-    }
-  }
-  kfree((void*)pagetable);
-}
+
 // free a proc structure and the data hanging from it,
 // including user pages.
 // p->lock must be held.
@@ -191,6 +173,9 @@ freeproc(struct proc *p)
   p->trapframe = 0;
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
+  if(p->kvm_pagetable)
+    free_kvmpgtbl(p->kstack, p->kvm_pagetable, p->sz);
+  p->kvm_pagetable = 0;
   p->pagetable = 0;
   p->sz = 0;
   p->pid = 0;
@@ -203,7 +188,6 @@ freeproc(struct proc *p)
   // p->kvm_pagetable = 0;
   // vmprint(p->kvm_pagetable);
   // printf("ddsfbba");
-  free_kvmpgtbl(p->kvm_pagetable);
   // vmprint(p->kvm_pagetable);
   // printf("lalalala");
 }
@@ -293,6 +277,7 @@ userinit(void)
     pte_t *pte_k = walk(p->kvm_pagetable, i, 1);
     *pte_k = (*pte) & (~PTE_U);
   }  
+  // printf("zju");
 
   release(&p->lock);
 }
@@ -339,6 +324,12 @@ fork(void)
     release(&np->lock);
     return -1;
   }
+  for(int i = 0; i < p->sz && i < PLIC; i += PGSIZE)
+  {
+    pte_t *pte = walk(np->pagetable, i, 0);
+    pte_t *pte_n = walk(np->kvm_pagetable, i, 1);
+    *pte_n = (*pte) & (~PTE_U);
+  }
   np->sz = p->sz;
 
 
@@ -361,12 +352,7 @@ fork(void)
   pid = np->pid;
 
   np->state = RUNNABLE;
-  for(int i = 0; i < np->sz && i < PLIC; i += PGSIZE)
-  {
-    pte_t *pte = walk(np->pagetable, i, 0);
-    pte_t *pte_n = walk(np->kvm_pagetable, i, 1);
-    *pte_n = (*pte) & (~PTE_U);
-  }
+
 
 
   release(&np->lock);
@@ -408,9 +394,10 @@ exit(int status)
 {
   struct proc *p = myproc();
 
-  if(p == initproc)
+  if(p == initproc){
+    // printf("\n%d  ",status);
     panic("init exiting");
-
+  }
   // Close all open files.
   for(int fd = 0; fd < NOFILE; fd++){
     if(p->ofile[fd]){

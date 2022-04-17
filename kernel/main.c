@@ -36,6 +36,7 @@ main()
     sockinit();
 #endif    
     userinit();      // first user process
+    // printf("zju");
     __sync_synchronize();
     started = 1;
   } else {

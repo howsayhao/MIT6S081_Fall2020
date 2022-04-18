@@ -33,7 +33,7 @@ void
 periodic()
 {
   count = count + 1;
-  printf("alarm!\n");
+  printf("alarm! count == %d\n", count);
   sigreturn();
 }
 
@@ -46,6 +46,7 @@ test0()
   printf("test0 start\n");
   count = 0;
   sigalarm(2, periodic);
+  // printf("whereisfunct: %p\n", &periodic);
   for(i = 0; i < 1000*500000; i++){
     if((i % 1000000) == 0)
       write(2, ".", 1);
@@ -65,6 +66,8 @@ void __attribute__ ((noinline)) foo(int i, int *j) {
     write(2, ".", 1);
   }
   *j += 1;
+  // printf("j == %d\n", j);
+  // printf("zju comming\n");
 }
 
 //
@@ -101,6 +104,7 @@ test1()
     // restored correctly, causing i or j or the address ofj
     // to get an incorrect value.
     printf("\ntest1 failed: foo() executed fewer times than it was called\n");
+    printf("i==%d,j==%d\n", i, j);
   } else {
     printf("test1 passed\n");
   }

@@ -99,3 +99,61 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+
+int
+sys_sigreturn(void)
+{
+  struct proc* p = myproc();
+
+  p->trapframe->a0 = p->copyframe->a0;
+  p->trapframe->a1 = p->copyframe->a1;
+  p->trapframe->a2 = p->copyframe->a2;
+  p->trapframe->a3 = p->copyframe->a3;
+  p->trapframe->a4 = p->copyframe->a4;
+  p->trapframe->a5 = p->copyframe->a5;
+  p->trapframe->a6 = p->copyframe->a6;
+  p->trapframe->a7 = p->copyframe->a7;
+
+  p->trapframe->s0 = p->copyframe->s0;
+  p->trapframe->s1 = p->copyframe->s1;
+  p->trapframe->s2 = p->copyframe->s2;
+  p->trapframe->s3 = p->copyframe->s3;
+  p->trapframe->s4 = p->copyframe->s4;
+  p->trapframe->s5 = p->copyframe->s5;
+  p->trapframe->s6 = p->copyframe->s6;
+  p->trapframe->s7 = p->copyframe->s7;
+  p->trapframe->s8 = p->copyframe->s8;
+  p->trapframe->s9 = p->copyframe->s9;
+  p->trapframe->s10 = p->copyframe->s10;
+  p->trapframe->s11 = p->copyframe->s11;
+
+  p->trapframe->t0 = p->copyframe->t0;
+  p->trapframe->t1 = p->copyframe->t1;
+  p->trapframe->t2 = p->copyframe->t2;
+  p->trapframe->t3 = p->copyframe->t3;
+  p->trapframe->t4 = p->copyframe->t4;
+  p->trapframe->t5 = p->copyframe->t5;
+  p->trapframe->t6 = p->copyframe->t6;
+
+  p->trapframe->tp = p->copyframe->tp;
+  p->trapframe->gp = p->copyframe->gp;
+  p->trapframe->sp = p->copyframe->sp;
+  p->trapframe->ra = p->copyframe->ra;
+  p->trapframe->epc = p->copyframe->epc;
+
+  p->busyflag = 0;
+  // printf("comming zju\n");
+  return 0;
+}
+
+int 
+sys_sigalarm(void)
+{
+  struct proc* p = myproc();
+  p->interval = (int)(p->trapframe->a0);
+  p->handlfunct = (void(*)())(p->trapframe->a1);
+  // printf("whereisfunct: %p\n", p->handlfunct);
+  p->leftticks = p->interval;
+  return 0;
+}

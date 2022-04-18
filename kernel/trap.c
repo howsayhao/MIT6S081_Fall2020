@@ -77,9 +77,60 @@ usertrap(void)
     exit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
+  if(which_dev == 2){
     yield();
+    if(p->busyflag == 0) {
+      
+      if(p->leftticks > 0) {
+        p->leftticks --;
+      }else{
+        p->leftticks = 0;
+        if(p->interval) {
+          p->busyflag = 1;
 
+          p->copyframe->a0 = p->trapframe->a0;
+          p->copyframe->a1 = p->trapframe->a1;
+          p->copyframe->a2 = p->trapframe->a2;
+          p->copyframe->a3 = p->trapframe->a3;
+          p->copyframe->a4 = p->trapframe->a4;
+          p->copyframe->a5 = p->trapframe->a5;
+          p->copyframe->a6 = p->trapframe->a6;
+          p->copyframe->a7 = p->trapframe->a7;
+
+          p->copyframe->s0 = p->trapframe->s0;
+          p->copyframe->s1 = p->trapframe->s1;
+          p->copyframe->s2 = p->trapframe->s2;
+          p->copyframe->s3 = p->trapframe->s3;
+          p->copyframe->s4 = p->trapframe->s4;
+          p->copyframe->s5 = p->trapframe->s5;
+          p->copyframe->s6 = p->trapframe->s6;
+          p->copyframe->s7 = p->trapframe->s7;
+          p->copyframe->s8 = p->trapframe->s8;
+          p->copyframe->s9 = p->trapframe->s9;
+          p->copyframe->s10 = p->trapframe->s10;
+          p->copyframe->s11 = p->trapframe->s11;
+
+          p->copyframe->t0 = p->trapframe->t0;
+          p->copyframe->t1 = p->trapframe->t1;
+          p->copyframe->t2 = p->trapframe->t2;
+          p->copyframe->t3 = p->trapframe->t3;
+          p->copyframe->t4 = p->trapframe->t4;
+          p->copyframe->t5 = p->trapframe->t5;
+          p->copyframe->t6 = p->trapframe->t6;
+
+          p->copyframe->tp = p->trapframe->tp;
+          p->copyframe->gp = p->trapframe->gp;
+          p->copyframe->sp = p->trapframe->sp;
+          p->copyframe->ra = p->trapframe->ra;
+          p->copyframe->epc = p->trapframe->epc;
+
+          p->trapframe->epc = (uint64)p->handlfunct;  
+        }
+        p->leftticks = p->interval;
+      }
+    }
+  }
+  
   usertrapret();
 }
 

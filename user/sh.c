@@ -164,10 +164,14 @@ main(void)
         fprintf(2, "cannot cd %s\n", buf+3);
       continue;
     }
-    if(fork1() == 0)
+    if(fork1() == 0) 
       runcmd(parsecmd(buf));
     wait(0);
   }
+  // printf("\n\n\n");
+  // if(fork1() == 0)
+  //   runcmd(parsecmd("alarmtest"));
+  // while(1);
   exit(0);
 }
 

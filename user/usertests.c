@@ -2584,6 +2584,7 @@ countfree()
 {
   int fds[2];
 
+  // printf("zju\n");  
   if(pipe(fds) < 0){
     printf("pipe() failed in countfree()\n");
     exit(1);
@@ -2598,7 +2599,9 @@ countfree()
 
   if(pid == 0){
     close(fds[0]);
-    
+    // uint64 a = 0;
+    // printf("\n%p\n",*(char *)(a));
+    // printf("%p", sbrk(0));
     while(1){
       uint64 a = (uint64) sbrk(4096);
       if(a == 0xffffffffffffffff){
@@ -2607,6 +2610,7 @@ countfree()
 
       // modify the memory to make sure it's really allocated.
       *(char *)(a + 4096 - 1) = 1;
+      // printf("va: %p\n", a);
 
       // report back one more page.
       if(write(fds[1], "x", 1) != 1){
@@ -2619,11 +2623,13 @@ countfree()
   }
 
   close(fds[1]);
-
+  // printf("mofa\n");
   int n = 0;
   while(1){
+    // printf("* ");
     char c;
     int cc = read(fds[0], &c, 1);
+    // printf("%d\n", n);
     if(cc < 0){
       printf("read() failed in countfree()\n");
       exit(1);
@@ -2632,10 +2638,10 @@ countfree()
       break;
     n += 1;
   }
-
+  // printf("jiujiu");
   close(fds[0]);
   wait((int*)0);
-  
+  // printf("ok\n");
   return n;
 }
 
@@ -2774,6 +2780,7 @@ main(int argc, char *argv[])
   int free0 = countfree();
   int free1 = 0;
   int fail = 0;
+  // printf("($5$)\n");
   for (struct test *t = tests; t->s != 0; t++) {
     if((justone == 0) || strcmp(t->s, justone) == 0) {
       if(!run(t->f, t->s))

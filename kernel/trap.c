@@ -66,7 +66,7 @@ usertrap(void)
 
     syscall();
   } else if((which_dev = devintr()) != 0){
-    // ok
+    // ok，a device interrupt
   } else if(r_scause() == 13 || r_scause() == 15) {
     // printf("(*.*)%p\n",PGROUNDDOWN(r_stval()));
     pagetable_t pagetable = p->pagetable;

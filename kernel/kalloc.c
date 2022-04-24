@@ -23,9 +23,53 @@ struct {
   struct run *freelist;
 } kmem;
 
+struct {
+  struct spinlock lock;
+  int link[PGROUNDUP(PHYSTOP)/PGSIZE];
+} linkcount;
+
+void
+cow_linkclear(uint64 pa)
+{ 
+  acquire(&linkcount.lock);
+  linkcount.link[pa/PGSIZE] = 0;
+  release(&linkcount.lock);
+}
+void
+cow_linkcline(uint64 pa)
+{
+  acquire(&linkcount.lock);
+  linkcount.link[pa/PGSIZE] -= 1;
+  release(&linkcount.lock);
+}
+void
+cow_linkrise(uint64 pa)
+{
+  acquire(&linkcount.lock);
+  linkcount.link[pa/PGSIZE] += 1;
+  release(&linkcount.lock);  
+}
+int
+cow_linkacquire(uint64 pa)
+{
+  return linkcount.link[pa/PGSIZE];
+}
+
+void
+linkinit()
+{
+  initlock(&linkcount.lock, "linkcount");
+  for(int i = 0; i < PGROUNDUP(PHYSTOP) / PGSIZE; i++){
+    acquire(&linkcount.lock);
+    linkcount.link[i] = 0;
+    release(&linkcount.lock);
+  }
+}
+
 void
 kinit()
 {
+  linkinit();
   initlock(&kmem.lock, "kmem");
   freerange(end, (void*)PHYSTOP);
 }
@@ -52,6 +96,17 @@ kfree(void *pa)
     panic("kfree");
 
   // Fill with junk to catch dangling refs.
+  acquire(&kmem.lock);
+  cow_linkcline((uint64)pa);
+  if(cow_linkacquire((uint64)pa) > 0) {
+    release(&kmem.lock);
+    return ;
+  } else if(cow_linkacquire((uint64)pa) < 0) {
+
+    panic("negative auote");
+  }
+  release(&kmem.lock);
+
   memset(pa, 1, PGSIZE);
 
   r = (struct run*)pa;
@@ -60,6 +115,7 @@ kfree(void *pa)
   r->next = kmem.freelist;
   kmem.freelist = r;
   release(&kmem.lock);
+
 }
 
 // Allocate one 4096-byte page of physical memory.
@@ -76,7 +132,11 @@ kalloc(void)
     kmem.freelist = r->next;
   release(&kmem.lock);
 
-  if(r)
-    memset((char*)r, 5, PGSIZE); // fill with junk
+  if(r) {
+    memset((char*)r, 4, PGSIZE); // fill with junk
+    acquire(&linkcount.lock);
+    linkcount.link[(uint64)r/PGSIZE] = 1;
+    release(&linkcount.lock);
+  }
   return (void*)r;
 }

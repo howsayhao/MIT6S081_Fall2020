@@ -2540,6 +2540,7 @@ void
 execout(char *s)
 {
   for(int avail = 0; avail < 15; avail++){
+    // printf("time: %d\n", avail);
     int pid = fork();
     if(pid < 0){
       printf("fork failed\n");
@@ -2553,11 +2554,13 @@ execout(char *s)
         *(char*)(a + 4096 - 1) = 1;
       }
 
+      // printf("alive!\n");
       // free a few pages, in order to let exec() make some
       // progress.
       for(int i = 0; i < avail; i++)
         sbrk(-4096);
       
+      // printf("still alive!\n");
       close(1);
       char *args[] = { "echo", "x", 0 };
       exec("echo", args);

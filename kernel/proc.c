@@ -262,6 +262,7 @@ fork(void)
   struct proc *np;
   struct proc *p = myproc();
 
+  // printf("fork pid: %d\n", p->pid);
   // Allocate process.
   if((np = allocproc()) == 0){
     return -1;

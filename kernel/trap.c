@@ -67,7 +67,12 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else {
+  } else if(r_scause() == 15)
+  {
+    if(cowpagefault(p->pagetable, r_stval()) < 0)
+      p->killed = 1;
+  }
+  else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;
@@ -83,6 +88,77 @@ usertrap(void)
   usertrapret();
 }
 
+int
+cowpagefault(pagetable_t pagetable, uint64 va)
+{
+
+  // printf("mou~~  pid: %d  va:%p\n", myproc()->pid, va);
+  uint64 oldpa, newpa;
+  pte_t *oldpte, *newpte;
+  if(va > MAXVA || va > myproc()->sz)
+    return -1;
+  if((va < myproc()->trapframe->sp) && va > PGROUNDUP(myproc()->trapframe->gp))
+    return -1;
+  oldpte = walk(pagetable, va, 0);
+  if(oldpte == 0)
+    return -1;
+  if((*oldpte & PTE_U) == 0)
+    return -1;
+  if((*oldpte & PTE_V) == 0)
+    return -1;
+  if((*oldpte & PTE_C) == 0 || (*oldpte & PTE_W) != 0)
+    return -1;
+  
+  oldpa = PTE2PA(*oldpte);
+  if(cow_linkacquire(oldpa) == 1){
+    newpa = oldpa;
+    newpte = oldpte;
+    *newpte = (*newpte | PTE_W) & ~PTE_C;
+    return 0;
+  }
+  kfree((char*)oldpa);
+  if((newpa = (uint64)kalloc()) == 0)
+    return -1;
+  uint64 flags = (PTE_FLAGS(*oldpte) | PTE_W) & ~PTE_C;
+  memmove((char*)newpa, (char*)oldpa, PGSIZE);
+  uvmunmap(pagetable, PGROUNDDOWN(va), 1, 0);
+  mappages(pagetable, PGROUNDDOWN(va), PGSIZE, newpa, flags);
+  return 0;
+
+
+  // pte_t *pte;
+  // uint64 oldpa, newpa;
+  // // va >= MAXVA cause walk() panic
+  // if (va >= MAXVA)
+  //   return -1;
+  // if ((pte = walk(pagetable, va, 0)) == 0)
+  //   return -1;
+  // if ((*pte & PTE_C) == 0)
+  //   return -1;
+  // if (*pte & PTE_W)
+  //   return -1;
+  // // guard pae, trampoline, trapframe
+  // if ((*pte & PTE_U) == 0) {
+  //   printf("PTE_U=0\n");
+  //   return -1;
+  // }
+  // oldpa = PTE2PA(*pte);
+  // // Important optimization: if a store page fault and
+  // // the ref which pointed this phy-page is one, no copy.
+  // if (cow_linkacquire(oldpa) == 1) {
+  //   *pte = (*pte | PTE_W) & (~PTE_C);
+  //   return 0;
+  // }
+  // if ((newpa = (uint64)kalloc()) == 0) {
+  //   printf("cowpagefault: kalloc fault.\n");
+  //   return -1;
+  // }
+  // // copy the old page to the new page
+  // memmove((void*)newpa, (void*)oldpa, PGSIZE);
+  // *pte = (PA2PTE(newpa) | PTE_FLAGS(*pte) | PTE_W) & (~PTE_C);
+  // kfree((void*)oldpa);
+  // return 0;
+}
 //
 // return to user space
 //
@@ -144,7 +220,7 @@ kerneltrap()
     panic("kerneltrap: interrupts enabled");
 
   if((which_dev = devintr()) == 0){
-    printf("scause %p\n", scause);
+    printf("scause %p  pid:%d\n", scause, myproc()->pid);
     printf("sepc=%p stval=%p\n", r_sepc(), r_stval());
     panic("kerneltrap");
   }

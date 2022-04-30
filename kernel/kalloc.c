@@ -72,6 +72,11 @@ kinit()
   linkinit();
   initlock(&kmem.lock, "kmem");
   freerange(end, (void*)PHYSTOP);
+  for(int i = 0; i < PGROUNDUP(PHYSTOP) / PGSIZE; i++){
+    acquire(&linkcount.lock);
+    linkcount.link[i] = 0;
+    release(&linkcount.lock);
+  }
 }
 
 void
@@ -79,8 +84,17 @@ freerange(void *pa_start, void *pa_end)
 {
   char *p;
   p = (char*)PGROUNDUP((uint64)pa_start);
-  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE)
-    kfree(p);
+  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE) {
+    struct run *r;
+    if(((uint64)p % PGSIZE) != 0 || (char*)p < end || (uint64)p >= PHYSTOP)
+      panic("kfree");
+    memset(p, 1, PGSIZE);
+    r = (struct run*)p;
+    acquire(&kmem.lock);
+    r->next = kmem.freelist;
+    kmem.freelist = r;
+    release(&kmem.lock);
+  }
 }
 
 // Free the page of physical memory pointed at by v,
@@ -100,11 +114,12 @@ kfree(void *pa)
   cow_linkcline((uint64)pa);
   if(cow_linkacquire((uint64)pa) > 0) {
     release(&kmem.lock);
-    return ;
-  } else if(cow_linkacquire((uint64)pa) < 0) {
-
-    panic("negative auote");
-  }
+    return ;}
+  //  else if(cow_linkacquire((uint64)pa) < 0)
+    // panic("no!!!!!!!!!!!!");
+  // else if(cow_linkacquire((uint64)pa) < 0) {
+  //   panic("negative auote");
+  // }
   release(&kmem.lock);
 
   memset(pa, 1, PGSIZE);

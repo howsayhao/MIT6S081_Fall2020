@@ -2553,7 +2553,7 @@ execout(char *s)
           break;
         *(char*)(a + 4096 - 1) = 1;
       }
-
+      
       // printf("alive!\n");
       // free a few pages, in order to let exec() make some
       // progress.
@@ -2561,7 +2561,9 @@ execout(char *s)
         sbrk(-4096);
       
       // printf("still alive!\n");
+      // printf("time: %d\n", avail);
       close(1);
+      // printf("hein\n");
       char *args[] = { "echo", "x", 0 };
       exec("echo", args);
       exit(0);

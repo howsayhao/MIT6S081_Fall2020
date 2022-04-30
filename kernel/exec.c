@@ -21,6 +21,7 @@ exec(char *path, char **argv)
   pagetable_t pagetable = 0, oldpagetable;
   struct proc *p = myproc();
 
+
   begin_op();
 
   if((ip = namei(path)) == 0){
@@ -37,6 +38,7 @@ exec(char *path, char **argv)
 
   if((pagetable = proc_pagetable(p)) == 0)
     goto bad;
+  // printf("exec pgtbl?:%d\n", cow_linkacquire((uint64)pagetable));
 
   // Load program into memory.
   for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){

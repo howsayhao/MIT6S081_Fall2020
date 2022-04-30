@@ -116,6 +116,8 @@ cowpagefault(pagetable_t pagetable, uint64 va)
     *newpte = (*newpte | PTE_W) & ~PTE_C;
     return 0;
   }
+  if(cow_linkacquire(oldpa) == 0)
+    return -1;
   kfree((char*)oldpa);
   if((newpa = (uint64)kalloc()) == 0)
     return -1;

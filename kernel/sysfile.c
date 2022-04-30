@@ -101,6 +101,7 @@ sys_close(void)
     return -1;
   myproc()->ofile[fd] = 0;
   fileclose(f);
+  // printf("test\n");
   return 0;
 }
 

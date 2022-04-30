@@ -66,6 +66,7 @@ fileclose(struct file *f)
     panic("fileclose");
   if(--f->ref > 0){
     release(&ftable.lock);
+    // printf("test\n");
     return;
   }
   ff = *f;

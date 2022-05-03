@@ -2,12 +2,27 @@
 #include "param.h"
 #include "memlayout.h"
 #include "riscv.h"
+// #include "file.h"
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
 
+struct file {
+  enum { FD_NONE, FD_PIPE, FD_INODE, FD_DEVICE } type;
+  int ref; // reference count
+  char readable;
+  char writable;
+  struct pipe *pipe; // FD_PIPE
+  struct inode *ip;  // FD_INODE and FD_DEVICE
+  uint off;          // FD_INODE
+  short major;       // FD_DEVICE
+};
+
+
 struct spinlock tickslock;
 uint ticks;
+
+// extern struct file;
 
 extern char trampoline[], uservec[], userret[];
 
@@ -33,6 +48,7 @@ trapinithart(void)
 // handle an interrupt, exception, or system call from user space.
 // called from trampoline.S
 //
+extern pte_t *walk(pagetable_t pagetable, uint64 va, int alloc);
 void
 usertrap(void)
 {
@@ -65,6 +81,39 @@ usertrap(void)
     intr_on();
 
     syscall();
+  } else if(r_scause() == 15 || r_scause() == 13){
+    // printf("my: here come \n");
+    uint64 va = r_stval();
+    uint64 idex = -1;
+    for(int i = 0; i < NVMA; i++){
+      if(va >= (uint64)p->vmas[i].range_start && va < (uint64)p->vmas[i].range_start+p->vmas[i].length){
+        idex = i;
+        break;
+      }
+    }
+
+    if(idex == -1){
+      printf("my: not a mmap");
+      p->killed = 1;
+    } else {
+      struct vma *v = &(p->vmas[idex]); 
+      va = PGROUNDDOWN(va);
+      uint64 offset = va - (uint64)v->range_start;
+      char *pa;
+      if((pa = kalloc()) == 0)
+        panic("my: no more pa for mmap");
+      memset(pa, 0, PGSIZE);
+      begin_op();
+      ilock(v->df->ip);
+      readi(v->df->ip, 0, (uint64)pa, offset, PGSIZE);
+      iunlock(v->df->ip);
+      end_op();
+      pte_t *pte;
+      if((pte = walk(p->pagetable, va, 1)) == 0)
+        panic("my: can not find a pte for mmap");
+      *pte = PA2PTE(pa) | v->perm | PTE_V | PTE_U;
+    }
+
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {

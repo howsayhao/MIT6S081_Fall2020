@@ -484,3 +484,112 @@ sys_pipe(void)
   }
   return 0;
 }
+
+uint64
+sys_mmap(void)
+{
+  // void *addr = 0;
+  int length, prot, flags, fd, offset;
+  struct proc *p = myproc();
+  struct file *f;
+  int perm = 0;
+// argstr(0, addr, MAXARG);  // go wrong if add this sentece, i do not know how to use argstr, replace with argint can also work
+// printf("hh\n");  
+  if(
+     (argint(1, &length) < 0) ||\
+     (argint(2, &prot) < 0) ||\
+     (argint(3, &flags) < 0) ||\
+     (argfd(4, &fd, &f) < 0) ||\
+     (argint(5, &offset) < 0) ||\
+     (p->sz+PGROUNDUP(length) > MAXVA))
+    {
+      panic("my: mmap get args failed");
+  }
+
+  uint64 oldsz = p->sz;
+  uint64 newsz = p->sz + PGROUNDUP(length);
+  p->sz = newsz;
+
+  if(prot&PROT_READ){
+    if(!f->readable){
+      return 0xffffffffffffffff;
+    }
+    perm |= PTE_R;
+  }
+  if(prot&PROT_WRITE){
+    if((!f->writable) && (flags&MAP_SHARED)){
+      return 0xffffffffffffffff;
+    }
+    perm |= PTE_W;
+  }
+
+  for(int i = 0; i < NVMA; i++){
+    if(p->vmas[i].valid == 0){
+      struct vma *v = &(p->vmas[i]);
+      v->df = f;
+      v->fd = fd;
+      v->length = length;
+      v->offset = 0;
+      v->perm = perm;
+      v->flags = flags;
+      v->range_start = oldsz;
+      v->valid = 1;
+      filedup(f);
+      return (uint64)v->range_start;
+    }
+  }
+  
+  p->sz = oldsz;
+  panic("my: no free space for mmp");
+
+  return 0;
+}
+
+extern pte_t *walk(pagetable_t pagetable, uint64 va, int alloc);
+uint64
+sys_munmap(void)
+{
+  int addr;
+  int length;
+  struct proc *p = myproc();
+      
+  if((argint(0, &addr) < 0) || (argint(1, &length) < 0))
+    panic("my: munmap get args fail");
+
+  int idex = -1;
+  for(int i = 0; i < NVMA; i++){
+    struct vma *v = &(p->vmas[i]);
+    if(v->valid == 1 && v->range_start == (uint64)addr){
+        idex = i;
+        break;
+    }
+  }
+  if(idex == -1)
+    return -1;
+  struct vma *v = &(p->vmas[idex]);
+
+  length = PGROUNDUP(length);
+  if(v->perm&PROT_WRITE && v->df->writable && v->flags&MAP_SHARED){
+    struct inode *ip = v->df->ip;
+    begin_op();
+    ilock(ip);
+    writei(ip, 1, (uint64)addr, v->offset, length);
+    iunlock(ip);
+    end_op();
+  }
+  v->range_start += length;
+  v->length -= length;
+  v->offset += length;
+  if(v->length <= 0){
+    v->valid = 0;
+    fileclose(v->df);
+  }
+
+  uint64 va = (uint64)addr;
+  // pte_t *pte;
+  for(; va < ((uint64)addr+length); va += PGSIZE){
+    uvmunmap(p->pagetable, va, 1, 1);  
+  }
+
+  return 0;
+}

@@ -133,6 +133,8 @@ found:
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
+  for(int i = 0; i < NVMA; i++)
+    p->vmas[i].valid = 0;
 
   return p;
 }
@@ -302,6 +304,22 @@ fork(void)
 
   np->state = RUNNABLE;
 
+  for(i = 0; i < NVMA; i++)
+  {
+    np->vmas[i].df = p->vmas[i].df;
+    np->vmas[i].fd = p->vmas[i].fd;
+    np->vmas[i].flags = p->vmas[i].flags;
+    np->vmas[i].length = p->vmas[i].length;
+    np->vmas[i].offset = p->vmas[i].offset;
+    np->vmas[i].perm = p->vmas[i].perm;
+    np->vmas[i].range_start = p->vmas[i].range_start;
+    np->vmas[i].valid = p->vmas[i].valid;
+    if(np->vmas[i].valid == 1){
+      struct file *f = np->vmas[i].df;
+      filedup(f);
+    }
+  }
+
   release(&np->lock);
 
   return pid;
@@ -391,6 +409,10 @@ exit(int status)
 
   p->xstate = status;
   p->state = ZOMBIE;
+
+  for(int i = 0; i < NVMA; i++){
+    p->vmas[i].valid = 0;
+  }
 
   release(&original_parent->lock);
 

@@ -111,9 +111,11 @@ mmap_test(void)
   // offset in the file.
   //
   char *p = mmap(0, PGSIZE*2, PROT_READ, MAP_PRIVATE, fd, 0);
+  // printf("my: git\n");
   if (p == MAP_FAILED)
     err("mmap (1)");
   _v1(p);
+  // printf("kk\n");
   if (munmap(p, PGSIZE*2) == -1)
     err("munmap (1)");
 
@@ -123,6 +125,7 @@ mmap_test(void)
   // should be able to map file opened read-only with private writable
   // mapping
   p = mmap(0, PGSIZE*2, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
+  // printf("hg\n");
   if (p == MAP_FAILED)
     err("mmap (2)");
   if (close(fd) == -1)
@@ -268,6 +271,7 @@ fork_test(void)
   if (p2 == MAP_FAILED)
     err("mmap (5)");
 
+  // printf("oooo\n");
   // read just 2nd page.
   if(*(p1+PGSIZE) != 'A')
     err("fork mismatch (1)");
@@ -275,8 +279,10 @@ fork_test(void)
   if((pid = fork()) < 0)
     err("fork");
   if (pid == 0) {
+    // printf("kkk\n");
     _v1(p1);
     munmap(p1, PGSIZE); // just the first page
+    // printf("lll\n");
     exit(0); // tell the parent that the mapping looks OK.
   }
 

@@ -44,7 +44,9 @@ cleanup(void)
 static int
 stat_slink(char *pn, struct stat *st)
 {
+  // printf("begin\n");
   int fd = open(pn, O_RDONLY | O_NOFOLLOW);
+  // printf("end\n");
   if(fd < 0)
     return -1;
   if(fstat(fd, st) != 0)
@@ -131,6 +133,7 @@ done:
   close(fd2);
 }
 
+
 static void
 concur(void)
 {
@@ -147,7 +150,7 @@ concur(void)
     exit(1);
   }
   close(fd);
-
+  // printf("cone\n");
   for(int j = 0; j < nchild; j++) {
     pid = fork();
     if(pid < 0){
@@ -155,6 +158,7 @@ concur(void)
       exit(1);
     }
     if(pid == 0) {
+      // printf("cone\n");
       int m = 0;
       unsigned int x = (pid ? 1 : 97);
       for(i = 0; i < 100; i++){
